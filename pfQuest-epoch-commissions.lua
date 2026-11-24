@@ -39,6 +39,8 @@ local syncRequested = false
 local refreshAt
 local pendingMarkerRebuild = false
 
+-- Commission pins are generated from explicit quest start/end entities only.
+
 local function Print(message)
   if DEFAULT_CHAT_FRAME then
     DEFAULT_CHAT_FRAME:AddMessage("|cff33ffccpf|r Commission Tracker: " .. message)
@@ -327,44 +329,127 @@ local function CommissionNodeClick()
   pfMap.NodeClick()
 end
 
-local function AddQuestMarkers(quest)
-  local maps = {}
-  local meta = { addon = ADDON_ID, func = CommissionNodeClick }
-  local oldCurrentGivers = pfQuest_config.currentquestgivers
+local function AddCommissionEndpoint(quest, entityType, entityID, questLocationType, maps)
+  if not pfDatabase then return maps end
 
-  -- SearchQuestID normally obeys pfQuest's "current quest givers" option.
-  -- The commission tracker needs both the issuer and destination pins, so
-  -- temporarily enable them only for this database search.
-  pfQuest_config.currentquestgivers = "1"
+  local meta = {
+    addon = ADDON_ID,
+    func = CommissionNodeClick,
+    quest = quest.title,
+    questid = quest.id,
+    QTYPE = questLocationType,
+    texture = pfQuestConfig.path .. "\\img\\track",
+    layer = 6,
+    qlvl = 0,
+    qmin = 0,
+  }
+
   local ok, result = pcall(function()
-    return pfDatabase:SearchQuestID(quest.id, meta, maps)
+    if entityType == "U" and type(pfDatabase.SearchMobID) == "function" then
+      return pfDatabase:SearchMobID(entityID, meta, maps)
+    elseif entityType == "O" and type(pfDatabase.SearchObjectID) == "function" then
+      return pfDatabase:SearchObjectID(entityID, meta, maps)
+    end
+    return maps
   end)
-  pfQuest_config.currentquestgivers = oldCurrentGivers
 
   if ok and type(result) == "table" then
-    questMaps[quest.id] = result
     return result
   end
 
-  questMaps[quest.id] = maps
   return maps
 end
 
+local function AddQuestEndpointMarkers(quest)
+  local maps = {}
+  local data = quest and quest.data
+  if not data then
+    questMaps[quest.id] = maps
+    return
+  end
+
+  -- Do not call SearchQuestID here. It intentionally indexes objectives,
+  -- item sources, creatures, and area triggers as well as quest givers. The
+  -- commission tracker only wants the explicit start/end entities declared
+  -- in the quest record, so search those IDs directly instead.
+  local endpoints = {
+    { data.start, "NPC_START", "OBJECT_START" },
+    { data["end"], "NPC_END", "OBJECT_END" },
+  }
+
+  for _, endpoint in ipairs(endpoints) do
+    local records, unitType, objectType = endpoint[1], endpoint[2], endpoint[3]
+    if records then
+      for _, entityID in pairs(records.U or {}) do
+        maps = AddCommissionEndpoint(quest, "U", entityID, unitType, maps)
+      end
+      for _, entityID in pairs(records.O or {}) do
+        maps = AddCommissionEndpoint(quest, "O", entityID, objectType, maps)
+      end
+    end
+  end
+
+  questMaps[quest.id] = maps
+end
+
+local function EnsureTrackMarkerLayerHook()
+  if not pfMap or not pfMap.UpdateNode or pfMap.commissionTrackLayerHook then return end
+
+  local originalUpdateNode = pfMap.UpdateNode
+  local trackedTexture = pfQuestConfig.path .. "\\img\\track"
+  local layerSixTexture = pfQuestConfig.path .. "\\img\\fav"
+
+  -- pfQuest's internal texture-layer table knows about fav.tga (layer 6),
+  -- but not track.tga. Temporarily present tracked nodes as fav during the
+  -- core layer calculation, then restore track.tga as the displayed texture.
+  -- This keeps the dedicated tracking-pin artwork while preserving the
+  -- intended high-priority map/minimap layer.
+  pfMap.UpdateNode = function(self, frame, node, color, obj, distance)
+    local changed = {}
+    for _, entry in pairs(node or {}) do
+      if entry and entry.addon == ADDON_ID and entry.texture == trackedTexture then
+        changed[table.getn(changed) + 1] = entry
+        entry.texture = layerSixTexture
+      end
+    end
+
+    originalUpdateNode(self, frame, node, color, obj, distance)
+
+    for _, entry in ipairs(changed) do
+      entry.texture = trackedTexture
+    end
+
+    local selected = node and frame and frame.title and node[frame.title]
+    if selected and selected.addon == ADDON_ID and frame.texture == layerSixTexture then
+      frame.texture = trackedTexture
+      if frame.tex then
+        frame.tex:SetTexture(trackedTexture)
+        frame.tex:SetVertexColor(1, 1, 1)
+      end
+      if frame.pic then frame.pic:Hide() end
+    end
+  end
+
+  pfMap.commissionTrackLayerHook = true
+end
+
 local function NormalizeMarkerLevels()
+  EnsureTrackMarkerLayerHook()
   local addonNodes = pfMap and pfMap.nodes and pfMap.nodes[ADDON_ID]
   if not addonNodes then return end
 
-  -- The Epoch continent-map overlay applies pfQuest's normal level filters.
-  -- Commission pins are deliberately global: show all unfinished commissions,
-  -- including low-level and high-level destinations.
+  -- The UpdateNode hook preserves pfQuest layer 6 while displaying track.tga.
+  local trackedTexture = pfQuestConfig.path .. "\\img\\track"
+
   for _, zoneNodes in pairs(addonNodes) do
-    for _, node in pairs(zoneNodes) do
-      for _, data in pairs(node) do
+    for _, nodesByTitle in pairs(zoneNodes) do
+      for _, data in pairs(nodesByTitle) do
         data.qlvl = 0
         data.qmin = 0
         data.lvl = 0
         data.min = 0
-        data.questid = nil
+        data.texture = trackedTexture
+        data.layer = 6
         data.func = CommissionNodeClick
       end
     end
@@ -382,7 +467,7 @@ local function BuildMarkers(list)
   end
 
   for _, quest in ipairs(list) do
-    AddQuestMarkers(quest)
+    AddQuestEndpointMarkers(quest)
   end
 
   NormalizeMarkerLevels()
@@ -563,7 +648,7 @@ local function CreateUI()
 
   local showPins = CreateFrame("CheckButton", "pfQuestCommissionShowPins", frame, "UICheckButtonTemplate")
   showPins:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -218)
-  getglobal(showPins:GetName() .. "Text"):SetText("Show map markers")
+  getglobal(showPins:GetName() .. "Text"):SetText("Show tracked quest pins")
   showPins:SetScript("OnClick", function(self)
     cfg.showPins = self:GetChecked() and true or false
     BuildMarkers(visibleQuests)

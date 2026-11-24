@@ -10,7 +10,7 @@ A small, separate addon for WoW 3.3.5 that adds multi-profession checkbox filter
 - Faction views: `My Faction + Neutral`, `Alliance + Neutral`, `Horde + Neutral`, or `All (Alliance + Horde + Neutral)`. Neutral commissions are included in either faction-specific view and appear once in the all-factions list.
 - Detects explicit quest race masks and, when absent, uses pfQuest's own quest-starter faction lookup to identify Alliance/Horde commissions.
 - Shows each commission's faction classification in the list and tooltip.
-- Marks the quest issuer and destination NPC/object, plus any additional objective locations that pfQuest has indexed.
+- Marks only the commission quest giver and turn-in NPC/object locations. Objective mobs, gathering nodes, item sources, area triggers, and other objective locations are deliberately excluded. All tracker locations use pfQuest-wotlk’s dedicated `img/track.tga` pin texture, clearly distinguishing tracked commissions from normal available/completed quest question marks.
 - Includes unfinished quests by default, including quests already in the quest log.
 - Can optionally include completed commissions.
 - Can request the character's completed-quest list from the server when `QueryQuestsCompleted()` is available; otherwise it falls back to pfQuest's local quest history.
@@ -29,7 +29,7 @@ The supplied database contains **473** commission records with a profession requ
 
 - Tick one or more profession checkboxes. **Select all** selects every detected commission profession; **Clear** removes every selection. With no professions selected, the list and markers are empty.
 - Select **My Faction + Neutral**, **Alliance + Neutral**, **Horde + Neutral**, or **All (Alliance + Horde + Neutral)** from the faction dropdown. My Faction follows the character. Neutral commissions are included in both faction-specific views; the all-factions view shows the union of both faction sets and neutral commissions without duplicating rows.
-- **Show map markers** controls whether the filtered unfinished commissions are added to the world map and minimap.
+- **Show tracked quest pins** controls whether the filtered unfinished commissions are added to the world map and minimap. Pins mark only quest givers and turn-in NPCs/objects; objective mobs, resource nodes, item sources, and other objective locations are not marked. This keeps the tracker focused on where commissions are accepted and turned in.
 - **Include completed** adds completed commissions back to the list and marker set.
 - Click a quest row to open the map at the best indexed location for that commission.
 - **Open map** opens a map that contains the highest concentration of the filtered commission locations.
@@ -40,6 +40,26 @@ Slash commands:
 - `/commission` — open the tracker
 - `/commission sync` — request a fresh server completion query
 - `/commission refresh` — rebuild the list and markers
+
+## Version 1.2.5
+
+- Fixed marker generation by reading each commission's explicit `start` and `end` NPC/gameobject IDs and searching only those entities with pfQuest's `SearchMobID()` / `SearchObjectID()` APIs.
+- Removed the fragile post-filtering of `SearchQuestID()` results. That API includes objective mobs, objects, item sources, and area triggers, and its mixed result set was causing tracked markers and map indexes to be lost in the supplied Epoch/pfQuest combination.
+- Restored per-quest map indexes so clicking a commission opens a map containing its indexed quest giver or turn-in location.
+- Uses pfQuest-wotlk's dedicated `img/track.tga` texture. A small `pfMap.UpdateNode` compatibility hook preserves the track pin's layer-6 priority while displaying the actual `track.tga` artwork.
+- Keeps commission pins limited to quest givers and turn-in NPCs/objects; objective locations are not added.
+
+## Version 1.2.3
+
+- Restricted tracker stars to commission quest givers and turn-in NPCs/objects.
+- Removed objective mobs, gathering nodes, item sources, area triggers, and other quest-objective locations from the tracker marker set.
+- Removed this addon's objective tooltip associations, so objective creatures no longer appear to be tracked by the commission tracker.
+- Rebuilt each quest's map index from the retained giver/turn-in markers only.
+
+## Version 1.2.2
+
+- Replaced the misleading yellow available/completed quest question-mark markers with pfQuest’s gold star marker for tracked commission locations.
+- Renamed the map-marker checkbox to **Show tracked quest stars** so the in-game control matches the new marker.
 
 ## Version 1.2.1
 
@@ -59,3 +79,8 @@ Slash commands:
 - The server completion query depends on the Epoch server exposing the WotLK `QueryQuestsCompleted()` API. When unavailable, completed status depends on pfQuest's saved per-character quest history.
 - Faction matching uses the standard WotLK race masks (including Draenei and Blood Elf) and pfQuest's `GetRaceMaskByID()` helper. Quests with no race restriction and no faction-specific quest starter are treated as available to all factions.
 - Profession names and quest titles use the enUS data supported by the supplied `pfQuest-epoch` package.
+
+
+### Map marker indexing (1.2.5)
+
+Commission pins are now created directly from each quest record's explicit `start` and `end` entity IDs. The tracker uses pfQuest's `SearchMobID()` and `SearchObjectID()` APIs for those NPC/gameobject IDs only. It does **not** use `SearchQuestID()` for pin generation, because that API also indexes objective creatures, objects, item sources, and area triggers. Clicking a commission now opens the best map containing its indexed starter/turn-in locations.
