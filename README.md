@@ -3,6 +3,8 @@
 A small, separate addon for WoW 3.3.5 that adds multi-profession checkbox filtering, explicit faction-plus-neutral views, and map markers for Project Epoch commission quests. It uses the quest and location databases already loaded by `pfQuest-wotlk` and `pfQuest-epoch`; it does not modify either addon.
 
 ## Features
+<img width="1248" height="1202" alt="Screenshot 2026-11-24 185958" src="https://github.com/user-attachments/assets/34371cab-448e-4b37-878c-fc125d639f29" />
+<img width="1161" height="663" alt="Screenshot 2026-11-24 185949" src="https://github.com/user-attachments/assets/b227319e-76a0-41e6-959d-c0f50204d23e" />
 
 - Detects commission quests from the Epoch quest database by the `Commission for` title and the quest metadata's profession (`skill`) ID.
 - Lists quests by profession, including the minimum required skill rank and quest level.
