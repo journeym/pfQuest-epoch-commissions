@@ -1,0 +1,9 @@
+## Interface: 30300
+## Title: |cff33ffccpf|cffffffffQuest |cffcccccc[Epoch Commission Tracker]
+## Notes: Multi-profession checkbox and Alliance/Horde/Neutral filters with map markers for Project Epoch commission quests.
+## Author: ChatGPT
+## Version: 1.2.1
+## Dependencies: pfQuest-wotlk, pfQuest-epoch
+## SavedVariablesPerCharacter: pfQuest_commission_config
+
+pfQuest-epoch-commissions.lua
